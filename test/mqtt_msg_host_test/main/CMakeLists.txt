@@ -10,6 +10,8 @@ target_link_options(${COMPONENT_LIB} INTERFACE ${SANITIZER_FLAGS})
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../lib/mqtt_msg
                  ${CMAKE_CURRENT_BINARY_DIR}/mqtt_msg)
 
+target_sources(mqtt_msg_lib PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../../lib/mqtt_msg/mqtt5_msg.c)
+target_compile_definitions(mqtt_msg_lib PRIVATE calloc=mqtt_test_calloc)
 target_compile_options(mqtt_msg_lib PRIVATE ${SANITIZER_FLAGS})
 
 target_link_libraries(${COMPONENT_LIB} PUBLIC

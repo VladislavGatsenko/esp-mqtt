@@ -7,6 +7,7 @@
 #include <rapidcheck.h>
 #include <rapidcheck/catch.h>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <random>
@@ -14,6 +15,7 @@
 
 extern "C" {
 #include "mqtt_msg.h"
+#include "mqtt5_msg.h"
 
     int platform_random(int max)
     {
@@ -29,6 +31,8 @@ extern "C" {
 
 namespace
 {
+
+bool fail_next_calloc = false;
 
 constexpr size_t mqtt_fixed_header_size = 5;
 
@@ -58,6 +62,40 @@ std::string generated_bytes(int length, int minimum, int maximum)
 }
 
 } // namespace
+
+extern "C" void *mqtt_test_calloc(size_t count, size_t size)
+{
+    if (fail_next_calloc) {
+        fail_next_calloc = false;
+        return nullptr;
+    }
+
+    return std::calloc(count, size);
+}
+
+TEST_CASE("MQTT5 shared subscription reports allocation failure")
+{
+    MessagePtr message = make_message(256);
+    REQUIRE(message != nullptr);
+    uint16_t message_id = 0;
+    esp_mqtt_topic_t topic{};
+    topic.filter = "sensors/+";
+    topic.qos = 1;
+    esp_mqtt5_subscribe_property_config_t subscribe_property{};
+    subscribe_property.is_share_subscribe = true;
+    subscribe_property.share_name = "group";
+    fail_next_calloc = true;
+    mqtt_message_t *encoded = mqtt5_msg_subscribe(message.get(), &topic, 1, &message_id, &subscribe_property);
+    REQUIRE(encoded == message.get());
+    REQUIRE(encoded->length == 0);
+    esp_mqtt5_unsubscribe_property_config_t unsubscribe_property{};
+    unsubscribe_property.is_share_subscribe = true;
+    unsubscribe_property.share_name = "group";
+    fail_next_calloc = true;
+    encoded = mqtt5_msg_unsubscribe(message.get(), topic.filter, &message_id, &unsubscribe_property);
+    REQUIRE(encoded == message.get());
+    REQUIRE(encoded->length == 0);
+}
 
 TEST_CASE("mqtt_msg_pingreq encodes the fixed MQTT control packet")
 {
